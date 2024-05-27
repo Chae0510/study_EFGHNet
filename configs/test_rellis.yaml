@@ -13,7 +13,7 @@ DEVICE: cuda
 
 # Dataset
 dataset: RELLIS_3D
-data_root: /data/RELLIS-3D
+data_root: /Users/baekchaeyoon/Desktop/Univ/VIP_Lab/RELLIS_data/data/RELLIS-3D
 num_points: 65536
 lidar_line: 64
 lidar_fov_rad: [0.125, -0.125]

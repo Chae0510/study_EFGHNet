@@ -194,6 +194,14 @@ def preproc_pcd(pcd, gts, num_points, lidar_line=None, radius=50.):
     else:
         pcd_ = np.zeros(shape=(3, num_points))
         pcd_[:3, :pcd.shape[0]] = pcd[:, :3].T
+    
+    #  # and add this - 랜덤 방지를 위해 추가
+    # pcd_ = np.zeros(shape=(3, num_points))
+    # pcd_[:3, :num_points] = pcd[:num_points, :3].T
+    
+    # and add this
+    pcd_ = np.zeros(shape=(3, num_points))
+    pcd_[:3, :num_points] = pcd[:num_points, :3].T
 
     pc = np.ones((4, pcd_.shape[1]))
     pc[:3, :] = pcd_[:3, :]

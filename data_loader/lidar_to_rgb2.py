@@ -3,9 +3,7 @@ import random
 import numpy as np
 import torch.utils.data as data
 import csv
-import cv2 as cv
-import matplotlib.pyplot as plt
-
+import cv2
 
 from data_loader.loader_utils import *
 
@@ -63,10 +61,24 @@ class RELLIS_3D(data.Dataset):
 
     def __getitem__(self, index):
         pcd, img, calib_seq, posej_T_posei, fname = self.file_reader(self.samples[index]) 
-        if self.mode != 'test': rand_init = None                 
-        else: rand_init = self.rand_init[fname]  
-        return self.process_data(pcd, img, calib_seq, posej_T_posei, fname, rand_init=rand_init)
-
+        if self.mode != 'test': 
+            rand_init = None                 
+        else: 
+            rand_init = self.rand_init[fname]
+        data = self.process_data(pcd, img, calib_seq, posej_T_posei, fname, rand_init=rand_init)
+        
+        # Ensure the data includes all keys your visualization expects
+        return {
+            'pc': data[0],  # Lidar point cloud
+            'img': data[1],  # Image from the camera
+            'calib': calib_seq,  # Calibration data
+            'posej_T_posei': posej_T_posei,  # Pose information
+            'fname': fname,  # Filename or identifier
+            'os1': self.samples[index]['os1'],  # Assuming 'os1' is stored in your samples dictionary
+            'image': self.samples[index]['image']  # Assuming 'image' path is stored in your samples dictionary
+        }
+        
+        
     def get_sequence_j(self, poses, seq_i):
         seq_sample_num = len(poses)
         # get the max and min of possible j
@@ -154,82 +166,82 @@ class RELLIS_3D(data.Dataset):
         sample_list = sample_list[:self.num_samples]
         return sample_list
 
-    def make_sample_dataset(self):  
+    # def make_sample_dataset(self):  
 
-        # 로그 확인 용
-        print("Creating sample dataset...")
+    #     # 로그 확인 용
+    #     print("Creating sample dataset...")
         
-        ptname = "pt_" + self.mode + ".lst"
-        if self.mode == "valid": ptname = "pt_val.lst"
-        f = open(os.path.join(self.data_path, ptname), 'r')
-        split_list = f.readlines()
-        f.close()
+    #     ptname = "pt_" + self.mode + ".lst"
+    #     if self.mode == "valid": ptname = "pt_val.lst"
+    #     f = open(os.path.join(self.data_path, ptname), 'r')
+    #     split_list = f.readlines()
+    #     f.close()
 
-        sample_split_dict = {}
-        for split_ in split_list:
-            split_os1_fn = split_.split(" ")[0]
-            seq, _, fn = split_os1_fn.split("/")
-            if (int(seq) in sample_split_dict.keys()) == False: sample_split_dict[int(seq)] = []
-            sample_split_dict[int(seq)].append(int(fn[:-4]))
+    #     sample_split_dict = {}
+    #     for split_ in split_list:
+    #         split_os1_fn = split_.split(" ")[0]
+    #         seq, _, fn = split_os1_fn.split("/")
+    #         if (int(seq) in sample_split_dict.keys()) == False: sample_split_dict[int(seq)] = []
+    #         sample_split_dict[int(seq)].append(int(fn[:-4]))
 
-        cam_name_dict = {}
-        for seq in sample_split_dict.keys():      
-            if (int(seq) in cam_name_dict.keys()) == False: cam_name_dict[int(seq)] = {}
-            file_list = os.listdir(os.path.join(self.data_path, "Rellis-3D", str(seq).zfill(5), "pylon_camera_node"))
-            for file_one in file_list:
-                fn = file_one.split("/")[-1]
-                cam_name_dict[int(seq)][fn[5:11]] = fn[:-4]       
+    #     cam_name_dict = {}
+    #     for seq in sample_split_dict.keys():      
+    #         if (int(seq) in cam_name_dict.keys()) == False: cam_name_dict[int(seq)] = {}
+    #         file_list = os.listdir(os.path.join(self.data_path, "Rellis-3D", str(seq).zfill(5), "pylon_camera_node"))
+    #         for file_one in file_list:
+    #             fn = file_one.split("/")[-1]
+    #             cam_name_dict[int(seq)][fn[5:11]] = fn[:-4]       
 
-        K_scale= np.eye(4)
-        K_scale[0,0] = 1600./ 1920.
-        K_scale[1,1] = 900. / 1200.
+    #     K_scale= np.eye(4)
+    #     K_scale[0,0] = 1600./ 1920.
+    #     K_scale[1,1] = 900. / 1200.
 
-        calib_dict = {}
-        for seq in sample_split_dict.keys():    
-            calib_dict[seq] = {}  
+    #     calib_dict = {}
+    #     for seq in sample_split_dict.keys():    
+    #         calib_dict[seq] = {}  
 
-            Tr_fn = os.path.join(self.data_path, "Rellis_3D", str(seq).zfill(5), "transforms.yaml")
-            RT = get_lidar2cam_mtx(Tr_fn)
-            calib_dict[seq]["Tr"] = RT
-            calib_dict[seq]["Tr_inv"] = np.linalg.inv(RT)
+    #         Tr_fn = os.path.join(self.data_path, "Rellis_3D", str(seq).zfill(5), "transforms.yaml")
+    #         RT = get_lidar2cam_mtx(Tr_fn)
+    #         calib_dict[seq]["Tr"] = RT
+    #         calib_dict[seq]["Tr_inv"] = np.linalg.inv(RT)
 
-            P_fn = os.path.join(self.data_path, "Rellis-3D", str(seq).zfill(5), "camera_info.txt")
-            P = get_cam_mtx(P_fn)
-            P_eye = np.eye(4)
-            P_eye[:3,:3] = P
-            P_eye = K_scale @ P_eye
-            calib_dict[seq]["P"] = P_eye
-            calib_dict[seq]["P_inv"] = np.linalg.inv(P_eye)        
+    #         P_fn = os.path.join(self.data_path, "Rellis-3D", str(seq).zfill(5), "camera_info.txt")
+    #         P = get_cam_mtx(P_fn)
+    #         P_eye = np.eye(4)
+    #         P_eye[:3,:3] = P
+    #         P_eye = K_scale @ P_eye
+    #         calib_dict[seq]["P"] = P_eye
+    #         calib_dict[seq]["P_inv"] = np.linalg.inv(P_eye)        
 
-        sample_list = []
-        for seq in sample_split_dict.keys():         
-            seq_str = str(seq).zfill(5)   
-            f = open(os.path.join(self.data_path, "Rellis-3D", seq_str, "poses.txt"), 'r')
-            poses = f.readlines()
-            f.close()
+    #     sample_list = []
+    #     for seq in sample_split_dict.keys():         
+    #         seq_str = str(seq).zfill(5)   
+    #         f = open(os.path.join(self.data_path, "Rellis-3D", seq_str, "poses.txt"), 'r')
+    #         poses = f.readlines()
+    #         f.close()
 
-            file_list = sample_split_dict[seq]
-            for seq_i in file_list:
+    #         file_list = sample_split_dict[seq]
+    #         for seq_i in file_list:
 
-                seq_j, posej_T_posei = self.get_sequence_j(poses, seq_i)
+    #             seq_j, posej_T_posei = self.get_sequence_j(poses, seq_i)
 
-                str_seq_i = str(seq_i).zfill(6)
-                str_seq_j = str(seq_j).zfill(6)  
+    #             str_seq_i = str(seq_i).zfill(6)
+    #             str_seq_j = str(seq_j).zfill(6)  
 
-                indiv_sample = {'image': os.path.join(self.data_path, "Rellis-3D", seq_str, "pylon_camera_node", cam_name_dict[seq][str_seq_j] + '.jpg'),
-                                "os1": os.path.join(self.data_path, "Rellis-3D", seq_str, "os1_cloud_node_kitti_bin", str_seq_i + '.bin'),
-                                'calib': calib_dict[seq],
-                                'posej_T_posei': posej_T_posei,
-                                'fname': seq_str + '_' + str_seq_i + '_' + str_seq_j}
-                sample_list.append(indiv_sample)
-        if self.mode == "train" or self.mode == "valid" : 
-            random.shuffle(sample_list)      
+    #             indiv_sample = {'image': os.path.join(self.data_path, "Rellis-3D", seq_str, "pylon_camera_node", cam_name_dict[seq][str_seq_j] + '.jpg'),
+    #                             "os1": os.path.join(self.data_path, "Rellis-3D", seq_str, "os1_cloud_node_kitti_bin", str_seq_i + '.bin'),
+    #                             'calib': calib_dict[seq],
+    #                             'posej_T_posei': posej_T_posei,
+    #                             'fname': seq_str + '_' + str_seq_i + '_' + str_seq_j}
+    #             sample_list.append(indiv_sample)
+    #     if self.mode == "train" or self.mode == "valid" : 
+    #         random.shuffle(sample_list)      
 
-        if self.num_samples > 0:
-            sample_list = sample_list[:self.num_samples]
-        else:
-            self.num_samples = len(sample_list)
-        return sample_list
+    #     if self.num_samples > 0:
+    #         sample_list = sample_list[:self.num_samples]
+    #     else:
+    #         self.num_samples = len(sample_list)
+    #     return sample_list
 
     def search_for_accumulation(self, pcd_dir, poses, seq_i, seq_sample_num, P_oi, stride):
 
@@ -321,34 +333,39 @@ class ProcessRELLIS(object):
 
     def __call__(self, pcd, img, calib_seq, posej_T_posei, fname, rand_init=None):
 
-        # 변환 매트릭스 추출
-        Tr = calib_seq['Tr']
-        P = calib_seq['P']
-        
-        # LiDAR 포인트를 카메라 좌표계로 변환합니다.
-        ones = np.ones((pcd.shape[0], 1))
-        pcd_homogeneous = np.hstack((pcd[:, :3], ones))  # 포인트에 동차 좌표 추가
-        pcd_camera = Tr.dot(pcd_homogeneous.T)
+        rr, rp, ry, tx, ty, tz, rt = rand_init_params(rand_init, self.l_rot_range, self.l_trs_range, self.c_rot_range)
 
-        # 카메라 내부 매개변수를 사용하여 2D 이미지 평면에 투영합니다.
-        pcd_projected = P.dot(pcd_camera)
-        pcd_projected /= pcd_projected[2, :]  # Z 값으로 나누어 정규화
+        R = np.array([[-1, 0, 0, 0],[0, -1, 0, 0],[0, 0, 1, 0], [0, 0, 0, 1]])
+        R_inv = np.linalg.inv(R)
 
-        # 2D 이미지 좌표 추출
-        x = pcd_projected[0, :].astype(int)
-        y = pcd_projected[1, :].astype(int)
+        pc = np.ones((4, pcd.shape[0]))
+        pc[:3, :] = pcd.T[:3, :]
+        pcd = R @ pc
+        pcd = pcd[:3, :].T
 
-        # 이미지에 포인트 그리기
-        for xi, yi in zip(x, y):
-            if 0 <= xi < img.shape[1] and 0 <= yi < img.shape[0]:
-                cv.circle(img, (xi, yi), 3, (255, 0, 0), -1)  # 빨간색 점으로 표시
+        # posej_T_posei = posej_T_posei 
 
-        plt.imshow(cv.cvtColor(img, cv.COLOR_BGR2RGB))
-        plt.title(f"Visualized Image: {fname}")
-        plt.axis('off')
-        plt.show()
+        # posej_T_posei = np.linalg.inv(posej_T_posei)
+        gts = preproc_gt(rr, rp, ry, tx, ty, tz, rt, posej_T_posei)
+        imgs = preproc_img_rellis(img, gts, self.raw_cam_img_size)
+        pc = preproc_pcd(pcd, gts, self.num_points, self.lidar_line)
 
-        return img
+        img = imgs['in']
+        gts['img_raw'] = imgs['raw']
+        gts['img_rot'] = imgs['rot']  
+        gts['img_mask'] = imgs['img_mask']     
+
+        A = np.array([[1, 0, -self.raw_cam_img_size[1] / 2],
+                      [0, 1, -self.raw_cam_img_size[0] / 2],
+                      [0, 0, 1]])
+
+        calib = calib_seq['P'] @ calib_seq['Tr'] @ R_inv
+        calib = calib[:3, :]
+
+        gts['cam_T_velo'] = np.linalg.inv(A) @ gts['intrinsic_sensor2'] @ A @ calib @ gts['sensor2_T_sensor1']    
+
+        return (pcd, img)
+        # return pc[:3, :], img, calib, A, gts, fname
     
 def get_default_args():
     return {
@@ -357,37 +374,114 @@ def get_default_args():
         'lidar_line': 64,
         'lidar_fov_rad': [0.125, -0.125],
         'raw_cam_img_size': [900, 1600],
-        'val_samples': -1,  
+        'train_samples':-1,
+        'val_samples': 500,  
         'test' : mode == 'test',
         'delta_ij_max': 40,
         'translation_max': 10,
-        'accumulation_frame_num': 0,
+        'accumulation_frame_num': 5,
         'accumulation_frame_skip': 1,
         'rand_init': '/Users/baekchaeyoon/Desktop/Univ/VIP_Lab/RELLIS_data/EFGH/params/rellis3d_rand_init_30_30.csv'
     }
 
+def load_point_cloud(bin_path):
+    """Load point cloud data from a .bin file."""
+    return np.fromfile(bin_path, dtype=np.float32).reshape(-1, 4)
+
+def project_to_image(points, P, Tr):
+    """Project 3D points to 2D image plane using camera matrix P and transformation matrix Tr."""
+    # Convert points to homogeneous coordinates
+    ones = np.ones((points.shape[0], 1))
+    points_hom = np.hstack((points[:, :3], ones))
+
+    # Apply transformation matrix Tr (LiDAR to Camera)
+    points_cam = Tr @ points_hom.T
+
+    # Filter points behind the camera
+    points_cam = points_cam[:, points_cam[2, :] > 0]
+
+    # Project points to image plane
+    points_img = P @ points_cam
+    points_img /= points_img[2, :]  # Normalize by the third (depth) component
+
+    return points_img[:2, :].T
+
+def draw_points_on_image(image, points_2d):
+    """Draw projected 2D points on the image."""
+    for point in points_2d:
+        x, y = int(point[0]), int(point[1])
+        if 0 <= x < image.shape[1] and 0 <= y < image.shape[0]:  # Check if point is within image bounds
+            cv2.circle(image, (x, y), 3, (0, 255, 0), -1)  # Draw green point
+
+    return image
+
+# # Example usage within your existing code setup
+# def visualize_lidar_on_image(sample):
+#     # sample 딕셔너리에서 직접 데이터 접근
+#     bin_path = sample['os1']
+#     img_path = sample['image']
+#     P = sample['calib']['P']
+#     Tr = sample['calib']['Tr']
+
+#     point_cloud = load_point_cloud(bin_path)
+#     image = cv2.imread(img_path)
+#     if image is None:
+#         print(f"Failed to load image at {img_path}")
+#         return
+
+#     points_2d = project_to_image(point_cloud, P, Tr)
+#     overlay_image = draw_points_on_image(image, points_2d)
+
+#     cv2.imshow('LiDAR Projection', overlay_image)
+#     cv2.waitKey(0)  # Press any key to close
+#     cv2.destroyAllWindows()
+
+
+# if __name__ == "__main__":
+#     mode = 'test'  # Assuming you're testing, adjust as necessary for other modes
+#     args = get_default_args()  # Ensure all needed parameters are set correctly
+
+#     # Initialize dataset
+#     try:
+#         dataset = RELLIS_3D(mode, args)
+#         print('Dataset initialized successfully.')
+#         if len(dataset) > 0:
+#             visualize_lidar_on_image(dataset[0])  # Visualize the first sample
+#     except Exception as e:
+#         print(f"Error during dataset initialization: {e}")
+
+# img, bin 내가 선택해서 출력
+def visualize_lidar_on_image(bin_path, img_path, P, Tr):
+    point_cloud = load_point_cloud(bin_path)
+    image = cv2.imread(img_path)
+    if image is None:
+        print(f"Failed to load image at {img_path}")
+        return
+
+    points_2d = project_to_image(point_cloud, P, Tr)
+    overlay_image = draw_points_on_image(image, points_2d)
+
+    cv2.imshow('LiDAR Projection', overlay_image)
+    cv2.waitKey(0)  # Press any key to close
+    cv2.destroyAllWindows()
+
+# 사용 예
 if __name__ == "__main__":
-    mode = 'test'  # Assuming you're testing, adjust as necessary for other modes
-    args = get_default_args()  # Ensure all needed parameters are set correctly
-
-    # Initialize dataset
-    try:
-        dataset = RELLIS_3D(mode, args)
-        print('Dataset initialized successfully.')
-    except Exception as e:
-        print(f"Error during dataset initialization: {e}")
-
-    # Check dataset contents
-    try:
-        print(f"Dataset length: {len(dataset)}")
-        if len(dataset) > 0:
-            print("Sample data check:")
-            for i in range(min(5, len(dataset))):  # Print details of up to 5 samples
-                print("Sample data check success")
-                # print(dataset[i])
-        else:
-            print("No data available in dataset.")
-    except Exception as e:
-        print(f"Error accessing dataset items: {e}")
-
-    print('Test complete.')
+    bin_path = "/Users/baekchaeyoon/Desktop/Univ/VIP_Lab/RELLIS_data/data/RELLIS-3D/RELLIS-3D/00000/os1_cloud_node_kitti_bin/002846.bin"
+    img_path = "/Users/baekchaeyoon/Desktop/Univ/VIP_Lab/RELLIS_data/data/RELLIS-3D/RELLIS-3D/00000/pylon_camera_node/frame002846-1581624937_350.jpg"
+    
+    point_cloud = np.fromfile(bin_path, dtype=np.float32).reshape(-1, 4)
+    print("Point Cloud Data:")
+    print(point_cloud[:]) 
+    
+    Tr = np.array([[ 0.03462247,  0.99936055, -0.00893175, -0.03566209],
+    [ 0.00479177, -0.00910301, -0.99994709, -0.17154603],
+    [-0.99938898,  0.03457784, -0.00510388, -0.13379309],
+    [ 0.,          0.,          0.,          1.        ]])
+        
+    P = np.array([[2.34470273e+03, 0.00000000e+00, 8.07738143e+02, 0.00000000e+00],
+    [0.00000000e+00, 2.10624456e+03, 4.68037479e+02, 0.00000000e+00],
+    [0.00000000e+00, 0.00000000e+00, 1.00000000e+00, 0.00000000e+00],
+    [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
+    
+    visualize_lidar_on_image(bin_path, img_path, P, Tr)
